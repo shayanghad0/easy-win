@@ -1,12 +1,9 @@
 # MT5 Single-Trade Manager
 
-A terminal-based trading assistant for **MetaTrader 5** that opens a single
-market position, monitors it with a live Rich dashboard, and closes it when
-your dollar-based Take-Profit or Stop-Loss target is hit.
-
-Designed for **discretionary traders** who want to decide *when* to enter but
-let the script enforce disciplined, fixed-dollar exits — with a Ctrl+C
-"detach" mode that hands the trade over to the broker.
+Two terminal-based trading assistants for **MetaTrader 5** — one lightweight,
+one feature-rich. Both open a single market position, monitor it with a live
+Rich dashboard, and close it on dollar-based TP/SL hits. A Ctrl+C "detach"
+mode pushes broker-side TP/SL so the trade survives even if your PC dies.
 
 ---
 
@@ -22,6 +19,14 @@ let the script enforce disciplined, fixed-dollar exits — with a Ctrl+C
   trade keeps running on MT5's servers even if your PC shuts down.
 - **Automatic filling-mode detection** (FOK / IOC) per symbol.
 - **Auto-close** when the target or stop threshold is reached.
+
+### `pts.py` adds
+
+- **Account validation** — verifies login, trading allowed, and non-zero balance.
+- **Partial close** — closes half the position at 50% of TP, locks in profit,
+  resets SL to breakeven + small buffer, then runs remainder to its own target.
+- **Net P&L tracking** — dashboard shows profit including swap/commission.
+- **Safer ticket resolution** — magic-number scan fallback for netting accounts.
 
 ---
 
@@ -49,7 +54,9 @@ pip install MetaTrader5 rich
    ```bash
    pip install MetaTrader5 rich
    ```
-4. Clone / copy `order.py` to a folder of your choice.
+4. Copy `main.py` (lightweight) or `pts.py` (feature-complete) to a folder.
+   `pts.py` is recommended — it adds account validation, partial close, and
+   fee-aware P&L tracking on top of everything in `main.py`.
 
 > ⚠️ The `MetaTrader5` Python module only works on **Windows**.
 > On Linux/macOS you'll need a Windows VM, Wine, or a remote MT5 host.
@@ -58,7 +65,7 @@ pip install MetaTrader5 rich
 
 ## ⚙️ Configuration
 
-Edit the top of `order.py`:
+Edit the top of either file. `main.py` has the core config:
 
 ```python
 SYMBOL         = "XAUUSD"   # Trading symbol
@@ -68,6 +75,21 @@ MAGIC          = 234000     # EA/magic number identifier
 PROFIT_TP      = 25.00      # $ profit target
 PROFIT_SL      = -12.75     # $ loss target (negative)
 CHECK_INTERVAL = 1          # Polling interval in seconds
+```
+
+`pts.py` adds these on top:
+
+```python
+# Partial TP (stage 1)
+PARTIAL_ENABLED       = True
+PARTIAL_TRIGGER_RATIO = 0.50     # Trigger at 50% of full TP
+PARTIAL_CLOSE_RATIO   = 0.50     # Close 50% of volume
+PARTIAL_NEW_SL_PROFIT = 5.00     # Minimum locked profit after partial
+
+# Final target for the REMAINING position (stage 2)
+PARTIAL_TP_REMAINING  = 15.00
+
+MAX_EMPTY_STRIKES     = 5        # Loop safety — breaks if position vanishes
 ```
 
 | Setting | Description |
@@ -80,29 +102,30 @@ CHECK_INTERVAL = 1          # Polling interval in seconds
 | `PROFIT_SL` | Gross price-based loss that triggers a close (must be negative). |
 | `CHECK_INTERVAL` | How often the loop polls MT5 (seconds). |
 
-> **Note on fees:** `PROFIT_TP` / `PROFIT_SL` are compared against
-> `pos.profit` (price P&L only). See **Known Limitations** below.
+
 
 ---
 
 ## ▶️ Usage
 
 ```bash
-python order.py buy     # open a BUY position
-python order.py sell    # open a SELL position
+python main.py buy      # lightweight version
+python pts.py sell      # full version with partial close
 ```
 
 Any other argument prints usage and exits.
 
 ### What happens at runtime
 
-1. Connects to MT5, validates the symbol, resolves the correct filling mode.
+1. Connects to MT5, validates account (pts.py), validates the symbol,
+   resolves the correct filling mode.
 2. Fetches the current tick and sends a market order.
 3. Enters a live monitoring loop:
    - Displays the dashboard (4 FPS refresh).
-   - Logs milestone events (every $1 of profit).
+   - Logs milestone events (every $1 of floating P&L).
+   - (pts.py) Triggers a partial close when floating ≥ `PROFIT_TP × PARTIAL_TRIGGER_RATIO`.
    - Closes when profit ≥ `PROFIT_TP` or ≤ `PROFIT_SL`.
-4. Prints a final summary panel.
+4. Prints a final summary panel with gross (main.py) or net (pts.py) totals.
 
 ### Detach mode (Ctrl+C)
 
@@ -178,10 +201,11 @@ These are worth understanding **before you trade real money**.
    On XAUUSD, swap can be $5–$15 per 0.05 lot per week. Long holds can
    eat most of your target.
 
-3. **`result.order` is used as the position ticket.**  
-   On most brokers order ticket == position ticket for market orders,
-   but this is not guaranteed. On some accounts (especially netting)
-   the very first loop iteration may think the position vanished.
+3. **Ticket resolution differs between versions.**  
+   `main.py` reads `result.order` directly — works on most brokers where  
+   order ticket == position ticket. `pts.py` resolves via  
+   `find_our_position()` which checks `result.position`, then falls back to  
+   magic-number scan. **Use `pts.py` on netting accounts.**
 
 4. **Filling mode with `allowed = 0`** (broker says "client chooses")  
    causes an immediate fatal exit. Should default to IOC instead.
@@ -192,9 +216,9 @@ These are worth understanding **before you trade real money**.
 
 6. **Single position only.** No multi-symbol, multi-ticket, or grid support.
 
-7. **No trailing stop, no breakeven, no partial closes.**
+7. **No trailing stop or grid support.**
 
-8. **Final summary reports gross P&L**, not net of swap/commission.
+8. **Final summary reports net P&L** (pts.py includes swap+commission; main.py uses gross).
 
 9. **Windows only** (MetaTrader5 Python module constraint).
 
@@ -231,7 +255,8 @@ Before running on a live account:
 
 ```
 .
-├── order.py     # The entire bot
+├── main.py      # Lightweight version (TP/SL close + detach)
+├── pts.py       # Full version (add partial close, account validation, net P&L)
 └── README.md    # This file
 ```
 
