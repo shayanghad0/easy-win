@@ -74,7 +74,7 @@ DEVIATION      = 20         # Max slippage in points
 MAGIC          = 234000     # EA/magic number identifier
 PROFIT_TP      = 25.00      # $ profit target
 PROFIT_SL      = -12.75     # $ loss target (negative)
-CHECK_INTERVAL = 1          # Polling interval in seconds
+CHECK_INTERVAL = 0.1        # Polling interval in seconds (100 ms)
 ```
 
 `pts.py` adds these on top:
@@ -121,7 +121,7 @@ Any other argument prints usage and exits.
    resolves the correct filling mode.
 2. Fetches the current tick and sends a market order.
 3. Enters a live monitoring loop:
-   - Displays the dashboard (4 FPS refresh).
+   - Displays the dashboard (10 FPS refresh, 100 ms polling).
    - Logs milestone events (every $1 of floating P&L).
    - (pts.py) Triggers a partial close when floating ≥ `PROFIT_TP × PARTIAL_TRIGGER_RATIO`.
    - Closes when profit ≥ `PROFIT_TP` or ≤ `PROFIT_SL`.

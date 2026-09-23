@@ -23,7 +23,7 @@ DEVIATION      = 20
 MAGIC          = 234000
 PROFIT_TP      = 30.00
 PROFIT_SL      = -12.75
-CHECK_INTERVAL = 1
+CHECK_INTERVAL = 0.1   # 100 ms polling
 
 # --- Partial TP (stage 1) ---
 PARTIAL_ENABLED       = True
@@ -416,7 +416,7 @@ milestone_step  = 1.0
 empty_strikes   = 0
 
 try:
-    with Live(console=console, refresh_per_second=4,
+    with Live(console=console, refresh_per_second=10,
               screen=True, transient=False) as live:
         while True:
             positions = mt5.positions_get(ticket=position_ticket)
